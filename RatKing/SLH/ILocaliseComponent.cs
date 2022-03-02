@@ -1,4 +1,4 @@
-﻿namespace RatKing.Base {
+﻿namespace RatKing.SLH {
 	public interface ILocaliseComponent {
 		void Localise();
 	}

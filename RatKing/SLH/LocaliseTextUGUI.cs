@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace RatKing.Base {
+namespace RatKing.SLH {
 
 	public class LocaliseTextUGUI : MonoBehaviour, ILocaliseComponent {
 		[SerializeField] string key = "";

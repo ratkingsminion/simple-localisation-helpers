@@ -2,7 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 
-namespace RatKing.Base {
+namespace RatKing.SLH {
 
 	[System.Serializable]
 	public struct LocalisationLanguage {

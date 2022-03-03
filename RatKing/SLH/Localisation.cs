@@ -16,10 +16,12 @@ namespace RatKing.SLH {
 	[DefaultExecutionOrder(-5000)]
 	public class Localisation : MonoBehaviour {
 
-		public static Base.Signal LANGUAGE_CHANGED = new Base.Signal();
-
+		/// <summary>
+		/// Gets called whenever the current language is changed
+		/// </summary>
+		public static System.Action OnLanguageChanged { get; set; } = null;
 		public static Localisation Inst { get; private set; }
-		//
+
 		[SerializeField] int keyPartCount = 16; // 16 should be more than enough anyway
 		[SerializeField, Tooltip("Optional: enter a definition file (JSON) that will define what languages exist")] string definitionFileName = "";
 		[SerializeField, Tooltip("If you don't have a definition file you need to add all languages here.")] LocalisationLanguage[] languages = null;
@@ -29,7 +31,7 @@ namespace RatKing.SLH {
 		public static SystemLanguage CurLanguage => Languages[CurLanguageIndex].language;
 		//
 		static Dictionary<string, string[]> textsByKey = new Dictionary<string, string[]>();
-		static List<ILocaliseComponent> localisations = new List<ILocaliseComponent>(32);
+		static System.Action localisationCallbacks = null;
 		//
 		static readonly char[] keyTrimmer = new[] { '\\', '/', '\n', '\r', '\t', '"', ' ' };
 		static bool addedDefinitions = false;
@@ -39,7 +41,7 @@ namespace RatKing.SLH {
 		void Awake() {
 			Inst = this;
 			InitTranslations(0);
-			LocaliseAll();
+			localisationCallbacks?.Invoke();
 		}
 
 		void OnDestroy() {
@@ -134,25 +136,24 @@ namespace RatKing.SLH {
 			if (CurLanguageIndex == index) { return; }
 			Inst.InitTranslations(index);
 			CurLanguageIndex = index;
-			Inst.LocaliseAll();
-			LANGUAGE_CHANGED.Broadcast();
+			localisationCallbacks?.Invoke();
+			OnLanguageChanged?.Invoke();
 		}
 
 		//
 
-		public static void Register(ILocaliseComponent component) {
-			if (localisations.Contains(component)) { Debug.LogWarning("Trying to add ui to localisation more than once!"); return; }
-			localisations.Add(component);
-			if (Inst != null) {
-				component.Localise();
-			}
+		/// <summary>
+		/// Similar to just registering the callback to OnLanguageChanged,
+		/// but will also call it directly if the localisation is prepared already
+		/// </summary>
+		/// <param name="localisationCallback">the method to be called</param>
+		public static void RegisterCallback(System.Action localisationCallback) {
+			localisationCallbacks += localisationCallback;
+			if (Inst != null) { localisationCallback?.Invoke(); }
 		}
 
-		public static void Unregister(ILocaliseComponent loca) {
-#if UNITY_EDITOR
-			if (!localisations.Contains(loca)) { Debug.LogWarning("Trying to unregister ui from localisation without it being registered!"); return; }
-#endif
-			localisations.Remove(loca);
+		public static void UnregisterCallback(System.Action localisationCallback) {
+			localisationCallbacks -= localisationCallback;
 		}
 
 		public static string Do(string key, int idx, bool convertSpecial = true) {
@@ -195,14 +196,6 @@ namespace RatKing.SLH {
 		public static void Set(string key, string value) {
 			if (textsByKey.TryGetValue(key, out var texts)) { texts[0] = value; }
 			else { textsByKey[key] = new[] { value }; }
-		}
-
-		//
-
-		void LocaliseAll() {
-			foreach (var loca in localisations) {
-				loca.Localise();
-			}
 		}
 	}
 

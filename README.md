@@ -9,7 +9,7 @@ Usage:
     "cam": "Camera",
     "audio": [ "Music", "Sound" ],
     "credits": {
-      "coder": "Programmer",
+      "code": "Programmer",
       "music": "Composer",
       "gfx": "Graphics artist"
     }
@@ -19,10 +19,12 @@ Usage:
 
 ```C#
   [SerializeField] TMPro.TextMeshProUGUI uiLabel = null;
-  [SerializeField] string locaKey = "credits/coder";
+  [SerializeField] string locaKey = "credits/code";
   [SerializeField] int locaKeyIndex = 0;
   
   void Start() {
     uiLabel.text = SLH.Localisation.Do("config/" + locaKey, locaKeyIndex);
+	// In order to set the label whenever the language is changed use SLH.Localisation.RegisterCallback()
+	// and/or the SLH.Localisation.OnLanguageChanged callback
   }
 ```

@@ -28,3 +28,20 @@ Usage:
 	// and/or the SLH.Localisation.OnLanguageChanged callback
   }
 ```
+
+Example for an optional definitions file:
+
+```JSON
+{
+  "English": {
+    "name": "English",
+    "code": "en",
+    "files": "English_complete.json"
+  },
+  "German": {
+    "name": "Deutsch",
+    "code": "de",
+    "files": [ "German_interface.json", "German_dialogs.json" ]
+  }
+}
+```

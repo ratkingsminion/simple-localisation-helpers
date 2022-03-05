@@ -67,6 +67,13 @@ namespace RatKing.SLH {
 			var dataPath = Application.dataPath + "/../";
 #endif
 
+			void MergeNodes(SimpleJSON.JSONNode to, SimpleJSON.JSONNode source) {
+				foreach (var kvp in source) {
+					if (to.HasKey(kvp.Key)) { MergeNodes(to[kvp.Key], kvp.Value); }
+					else { to.Add(kvp.Key, kvp.Value); }
+				}
+			}
+
 			if (hasDefinitionFile && Languages.Count == 0) {
 				var definitionString = System.IO.File.ReadAllText(dataPath + "/" + definitionsFileName);
 				var json = SimpleJSON.JSONNode.Parse(definitionString);
@@ -75,24 +82,24 @@ namespace RatKing.SLH {
 					var jsonLang = json[key];
 					if (!jsonLang.IsObject) { Debug.LogWarning("Localisation object " + key + " is malformed (" + jsonLang.ToString() + ")"); continue; }
 
-					SimpleJSON.JSONNode filesJson = new SimpleJSON.JSONObject();
+					SimpleJSON.JSONNode languageJSON = new SimpleJSON.JSONObject();
 					
 					string[] files = jsonLang["files"].IsArray ? jsonLang["files"].AsStringArray : new[] { jsonLang["files"].Value };
 					foreach (var fileName in files) {
 						var filePath = dataPath + "/" + fileName;
 						if (!System.IO.File.Exists(filePath)) { Debug.LogWarning("Localisation file for " + key + " does not exist"); continue; }
 						var fileContent = System.IO.File.ReadAllText(filePath);
-						var fileJson = SimpleJSON.JSONNode.Parse(fileContent);
-						if (!fileJson.IsObject) { Debug.LogWarning("Localisation file for " + key + " is malformed"); continue; }
-						foreach (var j in fileJson) { filesJson.Add(j.Key, j.Value); }
+						var fileJSON = SimpleJSON.JSONNode.Parse(fileContent);
+						if (!fileJSON.IsObject) { Debug.LogWarning("Localisation file for " + key + " is malformed"); continue; }
+						MergeNodes(languageJSON, fileJSON);
 					}
-
+					
 					Languages.Add(new LocalisationLanguage() {
 						language = (SystemLanguage)System.Enum.Parse(typeof(SystemLanguage), key, true),
 						name = jsonLang["name"].Value,
 						code = jsonLang["code"].Value,
 						files = null,
-						json = filesJson
+						json = languageJSON
 					});
 				}
 			}
@@ -105,9 +112,9 @@ namespace RatKing.SLH {
 				if (language.json == null) {
 					language.json = new SimpleJSON.JSONObject();
 					foreach (var file in language.files) {
-						var fileJson = SimpleJSON.JSONNode.Parse(file.text);
-						if (!fileJson.IsObject) { Debug.LogWarning("Localisation file for " + language.language + " is malformed"); continue; }
-						foreach (var j in fileJson) { language.json.Add(j.Key, j.Value); }
+						var fileJSON = SimpleJSON.JSONNode.Parse(file.text);
+						if (!fileJSON.IsObject) { Debug.LogWarning("Localisation file for " + language.language + " is malformed"); continue; }
+						MergeNodes(language.json, fileJSON);
 					}
 				}
 

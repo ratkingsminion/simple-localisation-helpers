@@ -19,8 +19,6 @@ namespace RatKing.SLH {
 	[DefaultExecutionOrder(-5000)]
 	public class Localisation : MonoBehaviour {
 
-		const int keyPartCount = 16; // 16 should be more than enough anyway
-
 		/// <summary>
 		/// Gets called whenever the current language is changed
 		/// </summary>
@@ -145,18 +143,16 @@ namespace RatKing.SLH {
 				}
 			}
 
-			GetLocalisationKeys(new string[keyPartCount], 0, language.json);
+			GetLocalisationKeys("", language.json);
 		}
 
-		void GetLocalisationKeys(string[] curKeyParts, int keyPartsCount, SimpleJSON.JSONNode field) {
+		void GetLocalisationKeys(string curKey, SimpleJSON.JSONNode field) {
 			if (field.IsObject) {
 				foreach (var key in field.Keys) {
-					curKeyParts[keyPartsCount] = key;
-					GetLocalisationKeys(curKeyParts, keyPartsCount + 1, field[key]);
+					GetLocalisationKeys((curKey + "/" + key).Trim(keyTrimmer), field[key]);
 				}
 			}
 			else if (field.IsArray) {
-				var curKey = string.Join("/", curKeyParts, 0, keyPartsCount).Trim(keyTrimmer);
 				var list = new List<string>(field.AsArray.Count);
 				foreach (var sub in field.AsArray) {
 					if (sub.Value.IsString) { list.Add(sub.Value); }
@@ -166,7 +162,6 @@ namespace RatKing.SLH {
 				}
 			}
 			else if (field.IsString) {
-				var curKey = string.Join("/", curKeyParts, 0, keyPartsCount).Trim(keyTrimmer);
 				textsByKey[curKey] = new[] { field.Value };
 			}
 		}

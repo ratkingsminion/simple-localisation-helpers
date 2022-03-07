@@ -5,17 +5,21 @@ using System.Collections.Generic;
 namespace RatKing.SLH {
 
 	[System.Serializable]
-	public struct LocalisationLanguage {
+	public class LocalisationLanguage {
 		public SystemLanguage language;
 		public string name;
 		public string code;
-		public TextAsset[] files;
+		public List<TextAsset> textAssets;
+		public List<string> folderNames;
 		// only during runtime:
+		[System.NonSerialized] public List<string> filesToLoad;
 		[System.NonSerialized] public SimpleJSON.JSONNode json;
 	}
 	
 	[DefaultExecutionOrder(-5000)]
 	public class Localisation : MonoBehaviour {
+
+		const int keyPartCount = 16; // 16 should be more than enough anyway
 
 		/// <summary>
 		/// Gets called whenever the current language is changed
@@ -23,7 +27,6 @@ namespace RatKing.SLH {
 		public static System.Action OnLanguageChanged { get; set; } = null;
 		public static Localisation Inst { get; private set; }
 
-		[SerializeField] int keyPartCount = 16; // 16 should be more than enough anyway
 		[SerializeField, Tooltip("Optional: enter a definitions file (JSON) that will define what languages exist")] string definitionsFileName = "";
 		[SerializeField, Tooltip("If you don't have a definitions file you need to add all languages here.")] LocalisationLanguage[] languages = null;
 		//
@@ -39,7 +42,67 @@ namespace RatKing.SLH {
 		//
 
 		void Awake() {
+			if (Inst != null) { Debug.LogError("More than one Localisation instance in the scene - deleting!"); Destroy(this); return; }
 			Inst = this;
+			
+#if UNITY_EDITOR
+			var dataPath = Application.dataPath + "/";
+#else
+			var dataPath = Application.dataPath + "/../";
+#endif
+
+			Languages = languages != null ? new List<LocalisationLanguage>(languages) : new List<LocalisationLanguage>();
+
+			// collect the needed files via the definition file
+
+			if (!string.IsNullOrWhiteSpace(definitionsFileName) && System.IO.File.Exists(dataPath + "/" + definitionsFileName)) {
+				var definitionString = System.IO.File.ReadAllText(dataPath + "/" + definitionsFileName);
+				var jsonDefinitions = SimpleJSON.JSONNode.Parse(definitionString);
+				if (!jsonDefinitions.IsObject) { Debug.LogError("Malformed localisations definition file"); return; }
+				foreach (var key in jsonDefinitions.Keys) {
+					var jsonLoca = jsonDefinitions[key];
+					if (!jsonLoca.IsObject) { Debug.LogWarning("Localisation object " + key + " is malformed (" + jsonLoca.ToString() + ")"); continue; }
+
+					var code = jsonLoca["code"];
+					var language = Languages.Find(l => l.code == code);
+					if (language == null) {
+						Languages.Add(language = new LocalisationLanguage() {
+							language = (SystemLanguage)System.Enum.Parse(typeof(SystemLanguage), key, true),
+							name = jsonLoca["name"].Value,
+							code = code,
+							textAssets = null,
+							folderNames = null,
+							filesToLoad = new List<string>(),
+							json = new SimpleJSON.JSONObject()
+						});
+					}
+					
+					var files = jsonLoca["files"].IsArray ? jsonLoca["files"].AsStringArray : new[] { jsonLoca["files"].Value };
+					foreach (var file in files) {
+						var filePath = dataPath + "/" + file;
+						if (!System.IO.File.Exists(filePath)) { Debug.LogWarning("Localisation file for " + key + " does not exist"); continue; }
+						language.filesToLoad.Add(filePath);
+					}
+					
+					var folders = jsonLoca["folders"].IsArray ? jsonLoca["folders"].AsStringArray : new[] { jsonLoca["folders"].Value };
+					foreach (var f in folders) { language.folderNames.Add(dataPath + "/" + f); }
+				}
+			}
+			
+			// collect further data via folders
+			foreach (var lang in Languages) {
+				if (lang.folderNames != null && lang.folderNames.Count > 0) {
+					foreach (var folder in lang.folderNames) {
+						var path = dataPath + "/" + folder;
+						if (!System.IO.Directory.Exists(path)) { Debug.LogError("Folder path " + path + " does not exist!"); continue; }
+						foreach (var filePath in System.IO.Directory.GetFiles(path, "*.json", System.IO.SearchOption.AllDirectories)) {
+							if (lang.filesToLoad == null) { lang.filesToLoad = new List<string>(); }
+							lang.filesToLoad.Add(filePath);
+						}
+					}
+				}
+			}
+
 			InitLocalisation(0);
 			localisationCallbacks?.Invoke();
 		}
@@ -50,76 +113,39 @@ namespace RatKing.SLH {
 		}
 
 		void InitLocalisation(int index) {
-			var hasDefinitionFile = !string.IsNullOrWhiteSpace(definitionsFileName);
-			if (!hasDefinitionFile && (languages == null || languages.Length == 0)) {
-				Debug.LogError("No localisations present");
-				return;
-			}
-
-			if (Languages == null) {
-				if (languages != null) { Languages = new List<LocalisationLanguage>(languages); }
-				else { Languages = new List<LocalisationLanguage>(); }
-			}
-			
-#if UNITY_EDITOR
-			var dataPath = Application.dataPath + "/";
-#else
-			var dataPath = Application.dataPath + "/../";
-#endif
-
-			void MergeNodes(SimpleJSON.JSONNode to, SimpleJSON.JSONNode source) {
-				foreach (var kvp in source) {
-					if (to.HasKey(kvp.Key)) { MergeNodes(to[kvp.Key], kvp.Value); }
-					else { to.Add(kvp.Key, kvp.Value); }
-				}
-			}
-
-			if (hasDefinitionFile && Languages.Count == 0) {
-				var definitionString = System.IO.File.ReadAllText(dataPath + "/" + definitionsFileName);
-				var json = SimpleJSON.JSONNode.Parse(definitionString);
-				if (!json.IsObject) { Debug.LogError("Malformed localisations definition file"); return; }
-				foreach (var key in json.Keys) {
-					var jsonLang = json[key];
-					if (!jsonLang.IsObject) { Debug.LogWarning("Localisation object " + key + " is malformed (" + jsonLang.ToString() + ")"); continue; }
-
-					SimpleJSON.JSONNode languageJSON = new SimpleJSON.JSONObject();
-					
-					string[] files = jsonLang["files"].IsArray ? jsonLang["files"].AsStringArray : new[] { jsonLang["files"].Value };
-					foreach (var fileName in files) {
-						var filePath = dataPath + "/" + fileName;
-						if (!System.IO.File.Exists(filePath)) { Debug.LogWarning("Localisation file for " + key + " does not exist"); continue; }
-						var fileContent = System.IO.File.ReadAllText(filePath);
-						var fileJSON = SimpleJSON.JSONNode.Parse(fileContent);
-						if (!fileJSON.IsObject) { Debug.LogWarning("Localisation file for " + key + " is malformed"); continue; }
-						MergeNodes(languageJSON, fileJSON);
-					}
-					
-					Languages.Add(new LocalisationLanguage() {
-						language = (SystemLanguage)System.Enum.Parse(typeof(SystemLanguage), key, true),
-						name = jsonLang["name"].Value,
-						code = jsonLang["code"].Value,
-						files = null,
-						json = languageJSON
-					});
-				}
-			}
-
+			if (Languages == null || Languages.Count == 0) { Debug.LogError("No localisations present!"); return; }
+			if (index < 0 || index >= Languages.Count) { Debug.LogError("Wrong localisation index!"); return; }
 			var language = Languages[index];
-			if (language.files == null && (language.json == null || !language.json.IsObject)) {
-				Debug.LogWarning("No valid definitions for localisation of " + language.language);
-			}
-			else {
-				if (language.json == null) {
-					language.json = new SimpleJSON.JSONObject();
-					foreach (var file in language.files) {
+
+			if (language.json == null) {
+				language.json = new SimpleJSON.JSONObject();
+
+				void MergeNodes(SimpleJSON.JSONNode to, SimpleJSON.JSONNode source) {
+					foreach (var kvp in source) {
+						if (to.HasKey(kvp.Key)) { MergeNodes(to[kvp.Key], kvp.Value); }
+						else { to.Add(kvp.Key, kvp.Value); }
+					}
+				}
+
+				if (language.textAssets != null) {
+					foreach (var file in language.textAssets) {
 						var fileJSON = SimpleJSON.JSONNode.Parse(file.text);
-						if (!fileJSON.IsObject) { Debug.LogWarning("Localisation file for " + language.language + " is malformed"); continue; }
+						if (!fileJSON.IsObject) { Debug.LogWarning("Localisation file + " + file.name + " for " + language.language + " is malformed"); continue; }
 						MergeNodes(language.json, fileJSON);
 					}
 				}
 
-				GetLocalisationKeys(new string[keyPartCount], 0, language.json);
+				if (language.filesToLoad?.Count > 0) {
+					foreach (var file in language.filesToLoad) {
+						var fileContent = System.IO.File.ReadAllText(file);
+						var jsonFile = SimpleJSON.JSONNode.Parse(fileContent);
+						if (!jsonFile.IsObject) { Debug.LogWarning("Localisation file " + file + " for " + language.language + " is malformed"); continue; }
+						MergeNodes(language.json, jsonFile);
+					}
+				}
 			}
+
+			GetLocalisationKeys(new string[keyPartCount], 0, language.json);
 		}
 
 		void GetLocalisationKeys(string[] curKeyParts, int keyPartsCount, SimpleJSON.JSONNode field) {
@@ -148,8 +174,10 @@ namespace RatKing.SLH {
 		//
 
 		public static void ChangeLanguage(string code) {
+			if (Inst == null) { Debug.LogWarning("Could not change language because instance is null! Call this later or change this script's execution order to be as early as possible."); return; }
+
 			var index = Languages.FindLastIndex(l => l.code == code);
-			if (index < 0) { Debug.LogWarning("Language " + code + " not found!"); return; }
+			if (index < 0) { Debug.LogWarning("Language '" + code + "' not found!"); return; }
 			else { ChangeLanguage(index); }
 		}
 

@@ -7,7 +7,7 @@ namespace RatKing.SLH {
 		[SerializeField] int index = 0;
 		[SerializeField] bool convertSpecial = true;
 		[SerializeField] bool includeChildren = false;
-		//
+		
 		TMPro.TextMeshPro[] texts;
 
 		void OnValidate() {
@@ -17,7 +17,7 @@ namespace RatKing.SLH {
 		//
 
 		void Awake() {
-			if (texts == null) { Initialise(); }
+			Initialise();
 		}
 
 		void Initialise() {

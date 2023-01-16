@@ -12,10 +12,11 @@ namespace RatKing.SLH {
 		public List<TextAsset> textAssets;
 		public List<string> folderNames;
 		// only during runtime:
+		[System.NonSerialized] public List<string> fullPaths;
 		[System.NonSerialized] public List<string> filesToLoad;
 		[System.NonSerialized] public SimpleJSON.JSONNode json;
 	}
-	
+
 	[DefaultExecutionOrder(-5000)]
 	public class Localisation : MonoBehaviour {
 
@@ -27,22 +28,33 @@ namespace RatKing.SLH {
 
 		[SerializeField, Tooltip("Optional: enter a definitions file (JSON) that will define what languages exist")] string definitionsFileName = "";
 		[SerializeField, Tooltip("If you don't have a definitions file you need to add all languages here.")] LocalisationLanguage[] languages = null;
-		//
+
 		public static List<LocalisationLanguage> Languages { get; private set; }
 		public static int CurLanguageIndex { get; private set; } = 0;
 		public static SystemLanguage CurLanguage => Languages[CurLanguageIndex].language;
-		//
+
 		static Dictionary<string, string[]> textsByKey = new Dictionary<string, string[]>();
 		static System.Action localisationCallbacks = null;
-		//
+
 		static readonly char[] keyTrimmer = new[] { '\\', '/', '\n', '\r', '\t', '"', ' ' };
+
+		//
+
+		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+		static void RuntimeInitializeOnLoad() {
+			OnLanguageChanged = null;
+			Inst = null;
+			CurLanguageIndex = 0;
+			textsByKey.Clear();
+			localisationCallbacks = null;
+		}
 
 		//
 
 		void Awake() {
 			if (Inst != null) { Debug.LogError("More than one Localisation instance in the scene - deleting!"); Destroy(this); return; }
 			Inst = this;
-			
+
 #if UNITY_EDITOR
 			var dataPath = Application.dataPath + "/";
 #else
@@ -70,29 +82,32 @@ namespace RatKing.SLH {
 							code = code,
 							textAssets = null,
 							folderNames = null,
+							fullPaths = new List<string>(),
 							filesToLoad = new List<string>(),
 							json = new SimpleJSON.JSONObject()
 						});
 					}
-					
+
 					var files = jsonLoca["files"].IsArray ? jsonLoca["files"].AsStringArray : new[] { jsonLoca["files"].Value };
 					foreach (var file in files) {
 						var filePath = dataPath + "/" + file;
 						if (!System.IO.File.Exists(filePath)) { Debug.LogWarning("Localisation file for " + key + " does not exist"); continue; }
 						language.filesToLoad.Add(filePath);
 					}
-					
+
 					var folders = jsonLoca["folders"].IsArray ? jsonLoca["folders"].AsStringArray : new[] { jsonLoca["folders"].Value };
 					foreach (var f in folders) { language.folderNames.Add(dataPath + "/" + f); }
 				}
 			}
-			
+
 			// collect further data via folders
 			foreach (var lang in Languages) {
 				if (lang.folderNames != null && lang.folderNames.Count > 0) {
+					lang.fullPaths = new List<string>();
 					foreach (var folder in lang.folderNames) {
 						var path = dataPath + "/" + folder;
 						if (!System.IO.Directory.Exists(path)) { Debug.LogError("Folder path " + path + " does not exist!"); continue; }
+						lang.fullPaths.Add(path + "/");
 						foreach (var filePath in System.IO.Directory.GetFiles(path, "*.json", System.IO.SearchOption.AllDirectories)) {
 							if (lang.filesToLoad == null) { lang.filesToLoad = new List<string>(); }
 							lang.filesToLoad.Add(filePath);
@@ -176,13 +191,19 @@ namespace RatKing.SLH {
 			else { ChangeLanguage(index); }
 		}
 
-		public static void ChangeLanguage(int index) {
+		public static void ChangeLanguage(int index, bool force = false) {
 			if (Inst == null) { Debug.LogWarning("Could not change language because instance is null! Call this later or change this script's execution order to be as early as possible."); return; }
-			if (CurLanguageIndex == index) { return; }
+			if (!force && CurLanguageIndex == index) { return; }
 			Inst.InitLocalisation(index);
 			CurLanguageIndex = index;
 			localisationCallbacks?.Invoke();
 			OnLanguageChanged?.Invoke();
+		}
+
+		public static void ReloadLanguage() {
+			var language = Languages[CurLanguageIndex];
+			language.json = null;
+			ChangeLanguage(CurLanguageIndex, true);
 		}
 
 		//
@@ -203,7 +224,7 @@ namespace RatKing.SLH {
 
 		public static string Do(string key, int idx, bool convertSpecial = true) {
 #if UNITY_EDITOR
-			if (textsByKey.Count == 0) {  Debug.LogError("Trying to get key " + key + " before localisation inited!"); return ""; }
+			if (textsByKey.Count == 0) { Debug.LogError("Trying to get key " + key + " before localisation inited!"); return ""; }
 			if (idx < 0) { return "'" + key + "' WRONG IDX!"; }
 #endif
 			if (!textsByKey.TryGetValue(key, out var texts)) { return "'" + key + "' NOT FOUND!"; }
@@ -214,7 +235,7 @@ namespace RatKing.SLH {
 
 		public static string Do(string key, bool convertSpecial = true) {
 #if UNITY_EDITOR
-			if (textsByKey.Count == 0) {  Debug.LogError("Trying to get key " + key + " before localisation inited!"); return ""; }
+			if (textsByKey.Count == 0) { Debug.LogError("Trying to get key " + key + " before localisation inited!"); return ""; }
 #endif
 			if (!textsByKey.TryGetValue(key, out var texts)) { return "'" + key + "' NOT FOUND!"; }
 			if (convertSpecial) { return texts[0].Replace("\\n", "\n").Replace("\\t", "\t"); }
@@ -223,7 +244,7 @@ namespace RatKing.SLH {
 
 		public static int TryGetAll(string key, out string[] result) {
 #if UNITY_EDITOR
-			if (textsByKey.Count == 0) {  Debug.LogError("Trying to get key " + key + " before localisation inited!");  result = null; return 0; }
+			if (textsByKey.Count == 0) { Debug.LogError("Trying to get key " + key + " before localisation inited!"); result = null; return 0; }
 #endif
 			if (textsByKey.TryGetValue(key, out result)) { return result.Length; }
 			return 0;

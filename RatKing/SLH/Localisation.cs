@@ -228,7 +228,7 @@ namespace RatKing.SLH {
 			if (idx < 0) { return "'" + key + "' WRONG IDX!"; }
 #endif
 			if (!textsByKey.TryGetValue(key, out var texts)) { return "'" + key + "' NOT FOUND!"; }
-			if (texts.Length >= idx) { return "'" + key + "' NO IDX " + idx + "!"; }
+			if (idx >= texts.Length) { return "'" + key + "' NO IDX " + idx + "!"; }
 			if (convertSpecial) { return texts[idx].Replace("\\n", "\n").Replace("\\t", "\t"); }
 			return texts[idx];
 		}

@@ -4,14 +4,14 @@ namespace RatKing.SLH {
 
 	public class LocaliseTMProUGUI : MonoBehaviour {
 		[SerializeField] string key = "";
-		[SerializeField] int index = 0;
+		[SerializeField, Tooltip("If index is -1, the index is chosen randomly")] int index = 0;
 		[SerializeField] bool convertSpecial = true;
 		[SerializeField] bool includeChildren = false;
 
 		TMPro.TextMeshProUGUI[] texts;
 
 		void OnValidate() {
-			if (index < 0) { index = 0; }
+			if (index < -1) { index = -1; }
 		}
 
 		//
@@ -34,7 +34,7 @@ namespace RatKing.SLH {
 
 		void Localise() {
 			if (texts == null) { Initialise(); return; }
-			var text = index == 0 ? Localisation.Do(key, convertSpecial) : Localisation.Do(key, index, convertSpecial);
+			var text = index < 0 ? Localisation.Do(key, true, convertSpecial) : Localisation.Do(key, index, convertSpecial);
 			foreach (var t in texts) { t.text = text; }
 		}
 	}

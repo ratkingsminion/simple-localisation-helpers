@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace RatKing.SLH {
 
@@ -233,13 +234,14 @@ namespace RatKing.SLH {
 			return texts[idx];
 		}
 
-		public static string Do(string key, bool convertSpecial = true) {
+		public static string Do(string key, bool randomIndex = false, bool convertSpecial = true) {
 #if UNITY_EDITOR
 			if (textsByKey.Count == 0) { Debug.LogError("Trying to get key " + key + " before localisation inited!"); return ""; }
 #endif
 			if (!textsByKey.TryGetValue(key, out var texts)) { return "'" + key + "' NOT FOUND!"; }
-			if (convertSpecial) { return texts[0].Replace("\\n", "\n").Replace("\\t", "\t"); }
-			return texts[0];
+			var idx = randomIndex ? Random.Range(0, texts.Length) : 0;
+			if (convertSpecial) { return texts[idx].Replace("\\n", "\n").Replace("\\t", "\t"); }
+			return texts[idx];
 		}
 
 		public static int TryGetAll(string key, out string[] result) {
